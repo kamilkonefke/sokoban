@@ -5,10 +5,12 @@ const stdin = std.io.getStdIn().reader();
 var map: [8][8]u8 = undefined;
 
 const Player = struct {
+    stars: i8,
+    moves: i8,
     x: i8,
     y: i8
 };
-var player: Player = .{ .x = 1, .y = 1 };
+var player: Player = .{ .x = 1, .y = 1, .stars = 0, .moves = 50 };
 
 fn load_map() ![]const u8 {
     const allocator = std.heap.page_allocator;
@@ -19,6 +21,8 @@ fn load_map() ![]const u8 {
     }
 
     return args[1];
+
+    // TODO: FILE FORMAT FOR MAPS
 }
 
 fn generate_map() !void {
@@ -28,22 +32,35 @@ fn generate_map() !void {
         }
     }
 
+    // for testing
     map[5][5] = 2;
+    map[5][6] = 2;
+
+    map[5][2] = 1;
     map[6][2] = 1;
+    map[7][2] = 1;
+
+    map[1][6] = 3;
+}
+
+fn restart_game() void {
+    try generate_map();
+    player = .{ .x = 1, .y = 1, .stars = 0, .moves = 50 };
 }
 
 fn render_map() !void {
     for(0..8) |y| {
         for(0..8) |x| {
             var char = switch(map[y][x]) {
-                0 => ".", // Air
-                1 => "X", // Wall
-                2 => "#", // Box
-                else => "."
+                0 => ". ", // Air
+                1 => "X ", // Wall
+                2 => "# ", // Box
+                3 => "* ", // Star
+                else => " "
             };
 
             if (player.x == x and player.y == y) {
-                char = "@";
+                char = "@ ";
             }
 
             try stdout.print("{s}", .{ char });
@@ -53,36 +70,71 @@ fn render_map() !void {
 }
 
 fn render_statusbar() !void {
-    try stdout.print("Sokoban!\n", .{});
+    try stdout.print("W|S|A|D - move \nR - restart\n", .{});
+    try stdout.print("Moves: {d} - Stars: {d}\n", .{ player.moves, player.stars });
 }
 
-fn push_box(x: i8, y: i8, dx: i8, dy: i8) void {
-    const xx: usize = @intCast(x);
-    const yy: usize = @intCast(y);
-    const dxx: usize = @intCast(dx);
-    const dyy: usize = @intCast(dy);
+fn player_move(dx: i8, dy: i8) void {
+    // wtf
+    const xi: isize = @intCast(player.x + dx);
+    const yi: isize = @intCast(player.y + dy);
 
-    if (map[yy][xx] == 2) {
-        map[yy][xx] = 0;
-        map[yy + dyy][xx + dxx] = 2;
+    if (xi < 0 or yi < 0 or
+        xi >= 8 or yi >= 8) {
+        return;
     }
-}
 
-fn is_cell_empty(x: i8, y: i8) bool {
-    const xx: usize = @intCast(x);
-    const yy: usize = @intCast(y);
-    if (map[yy][xx] == 1) {
-        return false;
-    } else {
-        return false;
-    }
-}
+    const xu: usize = @intCast(xi);
+    const yu: usize = @intCast(yi);
 
-fn player_move(dx: i8, dy: i8) {
-    if(is_cell_empty(dx, dy)) {
+    // check for cell type
+    switch(map[yu][xu]) {
+        0 => {
+            // move player
+            if (player.moves > 0) {
+                player.x += dx;
+                player.y += dy;
+                player.moves -= 1;
+            } else {
+                restart_game();
+            }
+        },
+        1 => {},
+        2 => {
+            // move box
+            const box_xi: isize = @intCast(xi + dx);
+            const box_yi: isize = @intCast(yi + dy);
 
-    } else {
+            if (box_xi < 0 or box_yi < 0 or
+                box_xi >= 8 or box_yi >= 8) {
+                return;
+            }
 
+            const bx: usize = @intCast(box_xi);
+            const by: usize = @intCast(box_yi);
+
+            if (map[by][bx] != 0) {
+                return;
+            }
+
+            map[yu][xu] = 0;
+            map[by][bx] = 2;
+
+            player.x += dx;
+            player.y += dy;
+
+            player.moves -= 1;
+        },
+        3 => {
+            map[yu][xu] = 0;
+            player.stars += 1;
+
+            player.x += dx;
+            player.y += dy;
+            
+            player.moves -= 1;
+        },
+        else => {}
     }
 }
 
@@ -113,30 +165,15 @@ pub fn main() !void {
         // Input
         _ = try stdin.read(&input_buffer);
         switch (input_buffer[0]) {
-            'w' => {
-                if (is_cell_empty(player.x, player.y - 1)) {
-                    player.y -= 1;
-                }
-            },
-            's' => {
-                if (is_cell_empty(player.x, player.y + 1)) {
-                    player.y += 1;
-                }
-            },
-            'a' => {
-                if (is_cell_empty(player.x - 1, player.y)) {
-                    player.x -= 1;
-                }
-            },
-            'd' => {
-                if (is_cell_empty(player.x + 1, player.y)) {
-                    player.x += 1;
-                }
-            },
+            'w' => player_move(0, -1),
+            's' => player_move(0, 1),
+            'a' => player_move(-1, 0),
+            'd' => player_move(1, 0),
+            'r' => restart_game(),
             'q' => return,
-            else => {}
+            else => {},
         }
 
-        std.time.sleep(17 * std.time.ns_per_ms);
+        std.time.sleep(33 * std.time.ns_per_ms);
     }
 }
