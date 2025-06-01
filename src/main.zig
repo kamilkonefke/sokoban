@@ -3,6 +3,9 @@ const stdout = std.io.getStdOut().writer();
 const stdin = std.io.getStdIn().reader();
 
 var map: [8][8]u8 = undefined;
+var objective_map: [8][8]u8 = undefined;
+var max_objectives: i8 = 3;
+var objectives: i8 = 0;
 
 const Player = struct {
     stars: i8,
@@ -11,6 +14,7 @@ const Player = struct {
     y: i8
 };
 var player: Player = .{ .x = 1, .y = 1, .stars = 0, .moves = 50 };
+var game_status: []const u8 = ":)";
 
 fn load_map() ![]const u8 {
     const allocator = std.heap.page_allocator;
@@ -29,6 +33,7 @@ fn generate_map() !void {
     for(0..8) |y| {
         for(0..8) |x| {
             map[y][x] = 0;
+            objective_map[y][x] = 0;
         }
     }
 
@@ -40,7 +45,8 @@ fn generate_map() !void {
     map[6][2] = 1;
     map[7][2] = 1;
 
-    map[1][6] = 3;
+    objective_map[6][4] = 1;
+    objective_map[2][2] = 1;
 }
 
 fn restart_game() void {
@@ -59,6 +65,14 @@ fn render_map() !void {
                 else => " "
             };
 
+            if (objective_map[y][x] == 1) {
+                char = "^ ";
+                if (map[y][x] == 2) {
+                    objective_map[y][x] = 2;
+                    char = "| ";
+                }
+            }
+
             if (player.x == x and player.y == y) {
                 char = "@ ";
             }
@@ -71,7 +85,32 @@ fn render_map() !void {
 
 fn render_statusbar() !void {
     try stdout.print("W|S|A|D - move \nR - restart\n", .{});
-    try stdout.print("Moves: {d} - Stars: {d}\n", .{ player.moves, player.stars });
+    try stdout.print("Moves: {d} - Stars: {d} - Objectives: {}/{}\n", .{ player.moves, player.stars, objectives, max_objectives });
+    try stdout.print("=> {s} \n", .{ game_status });
+}
+
+fn count_objectives() void {
+    objectives = 0;
+    max_objectives = 0;
+    for(0..8) |y| {
+        for(0..8) |x| {
+            switch (objective_map[y][x]) {
+                1 => {
+                    max_objectives += 1;
+                },
+                2 => {
+                    objectives += 1;
+                    max_objectives += 1;
+                },
+                else => {},
+            }
+        }
+    }
+
+    if (objectives == max_objectives) {
+        game_status = "YOU WIN!";
+        restart_game();
+    }
 }
 
 fn player_move(dx: i8, dy: i8) void {
@@ -126,6 +165,7 @@ fn player_move(dx: i8, dy: i8) void {
             player.moves -= 1;
         },
         3 => {
+            // Star
             map[yu][xu] = 0;
             player.stars += 1;
 
@@ -162,6 +202,8 @@ pub fn main() !void {
         try render_statusbar();
         try render_map();
 
+        count_objectives();
+
         // Input
         _ = try stdin.read(&input_buffer);
         switch (input_buffer[0]) {
@@ -174,6 +216,6 @@ pub fn main() !void {
             else => {},
         }
 
-        std.time.sleep(33 * std.time.ns_per_ms);
+        std.time.sleep(17 * std.time.ns_per_ms);
     }
 }
